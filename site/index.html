@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Public Beach Water Quality</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet: the map library. Loaded from the internet, nothing to install. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <main class="story">
+      <h1>Public Beach Water Quality</h1>
+      <nav id="city-bar"></nav>
+      <h2 id="panel-title">Toronto Beach Water Quality</h2>
+      <div id="panel-text"></div>
+      <p id="status">Loading data ...</p>
+    </main>
+        <div class="mapwrap">
+      <div id="map"></div>
+      <div class="legend">
+        <strong>E. coli (per 100 mL)</strong><br>
+        <span style="background:#2ca02c"></span>Safe (&le; 100)<br>
+        <span style="background:#d62728"></span>Unsafe (&gt; 100)
+      </div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
