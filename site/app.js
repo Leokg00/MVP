@@ -23,6 +23,7 @@ const CITIES = {
     zoom: 11,
     dataUrl: '../data/beaches.geojson',
     recentDataUrl: '../data/beaches_recent_avg.geojson',
+    parksDataUrl: '../data/nearest_parks.geojson',
     safeLimit: 100,   // E. coli per 100 mL
         about: `
       <p class="lede">This map shows the water quality of beaches in Toronto, which is otherwise only accessable from going to the beach itself.</p>
@@ -75,6 +76,7 @@ const colours = { safe: '#2ca02c', unsafe: '#d62728' };
 
 let latestLayer = null;    // the "latest reading" markers
 let recentLayer = null;    // the "recent seasons average" markers
+let parksLayer = null;     // the nearby-parks markers + dotted lines (independent overlay)
 let layersControl = null;  // the layer switcher (top right)
 let currentCity = null;    // city which map is on now
 
@@ -110,6 +112,47 @@ function recentPopup(p, city) {
     'Average E. coli: ' + p.avg_ecoli + ' per 100 mL<br>' +
     'Averaged over the last ' + p.seasons_used + ' seasons';
 }
+
+// A separate layer: the nearest park to each beach, for when swimming isn't
+// advised. Styled differently (teal squares) so it reads as "a different kind
+// of thing" from the red/green safety dots, not a third safety category.
+function makeParksLayer(data) {
+  return L.geoJSON(data, {
+    pointToLayer: function (feature, latlng) {
+      return L.circleMarker(latlng, {
+        radius: 6, stroke: true, color: '#000', weight: 1,
+        fillColor: '#1b998b', fillOpacity: 0.85
+      });
+    },
+    onEachFeature: function (feature, layer) {
+      const p = feature.properties;
+      layer.bindPopup('<strong>' + p.park_name + '</strong><br>' +
+        'Nearest to ' + p.nearest_to_beach + '<br>' +
+        p.distance_km + ' km away');
+    }
+  });
+}
+
+// A dotted line from each beach to its nearest park. Built client-side from
+// data already fetched -- beachData has each beach's own coordinates, parksData
+// has each park's coordinates and which beach it belongs to (nearest_to_beach).
+// No new data file needed, just matching the two up by beach name.
+function makeParkLines(beachData, parksData) {
+  const lines = parksData.features.map(function (parkFeature) {
+    const beachFeature = beachData.features.find(function (f) {
+      return f.properties.beach_name === parkFeature.properties.nearest_to_beach;
+    });
+    if (!beachFeature) { return null; }
+
+    const beachLatLng = [beachFeature.geometry.coordinates[1], beachFeature.geometry.coordinates[0]];
+    const parkLatLng = [parkFeature.geometry.coordinates[1], parkFeature.geometry.coordinates[0]];
+    return L.polyline([beachLatLng, parkLatLng], {
+      color: '#1b998b', weight: 2, opacity: 0.7, dashArray: '6, 6'
+    });
+  }).filter(Boolean);
+
+  return L.layerGroup(lines);
+}
 function showSection(key, section) {
   const city = CITIES[key];
   if (key !== currentCity) { showCity(key); }
@@ -137,6 +180,7 @@ function showCity(key) {
   // Remove the previous city's layers and layer switcher
   if (latestLayer) { map.removeLayer(latestLayer); }
   if (recentLayer) { map.removeLayer(recentLayer); }
+  if (parksLayer) { map.removeLayer(parksLayer); }
   if (layersControl) { map.removeControl(layersControl); }
 
   function loadJSON(url) {
@@ -146,21 +190,29 @@ function showCity(key) {
     });
   }
 
-  Promise.all([loadJSON(city.dataUrl), loadJSON(city.recentDataUrl)])
+  Promise.all([loadJSON(city.dataUrl), loadJSON(city.recentDataUrl), loadJSON(city.parksDataUrl)])
     .then(function (results) {
       const latestData = results[0];
       const recentData = results[1];
+      const parksData = results[2];
 
       latestLayer = makeLayer(latestData, city, latestPopup).addTo(map);
       recentLayer = makeLayer(recentData, city, recentPopup);
+      parksLayer = L.layerGroup([
+        makeParkLines(latestData, parksData),   // drawn first, so dots sit on top
+        makeParksLayer(parksData)
+      ]);
 
-      // Passed as the first argument (not the second) so Leaflet treats these
-      // as mutually exclusive, like radio buttons -- showing both at once would
-      // just stack two sets of markers on the exact same points.
-      layersControl = L.control.layers({
-        'Latest reading': latestLayer,
-        '3-season average': recentLayer
-      }).addTo(map);
+      // "Latest reading" / "3-season average" are passed as the first argument
+      // (base layers) so Leaflet treats them as mutually exclusive -- they're
+      // the same points, so showing both at once would just stack two sets of
+      // markers on top of each other. "Nearby parks" goes in the second
+      // argument (an overlay) because it sits at different locations and is
+      // meant to be viewed alongside whichever beach layer is active.
+      layersControl = L.control.layers(
+        { 'Latest reading': latestLayer, '3-season average': recentLayer },
+        { 'Nearby parks': parksLayer }
+      ).addTo(map);
 
       document.getElementById('status').textContent =
         'Showing ' + latestData.features.length + ' beaches in ' + city.name + '.';

@@ -53,6 +53,14 @@ The outlier check in `beach_quality.ipynb` caught two mislabelled sampling sites
 - [Toronto Beaches Water Quality](https://open.toronto.ca/dataset/toronto-beaches-water-quality/), City of Toronto Open Data, Open Government Licence – Toronto, accessed 2026-09-23. E. coli sample results by beach and sampling site, 2007–2026.
 - [Historical daily precipitation](https://climate.weather.gc.ca/historical_data/search_historic_data_e.html), Environment and Climate Change Canada, Open Government Licence – Canada, accessed 2026-10-07. Station: TORONTO CITY (Climate ID 6158355), 2007–2026.
 
+# After the Demo
+
+After the demo I had some ideas as to what to add to my map. Today I will add another layer to show the beaches seasonal average, and its distance to a nearest park. This second layer adds an option to users who find their beach to have unsafe water, they can go to a park. 
+
+# 5 second answers
+
+Partner saw that green was safe, and red was unsafe (colours made sense)
+
 
 ## AI disclosure
 
