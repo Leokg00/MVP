@@ -65,7 +65,7 @@ Partner saw that green was safe, and red was unsafe (colours made sense)
 For A3 I will add a season summary tab, so that my reader can visualize how rain affects water quality.
 It has depth because it (computes / responds / brings in) past data and produces meaningful results that are easily interpretable.
 I will know it works when someone can understand and see the results.
-My edge case is ________.
+My edge case is starting threshold that would not provide any meaningful results.
 
 Test 1. I input a year and water threshold.
   Expected: get a summary of that years beach season corresponding with the water threshold.
