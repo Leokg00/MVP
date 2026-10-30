@@ -24,6 +24,7 @@ const CITIES = {
     dataUrl: '../data/beaches.geojson',
     recentDataUrl: '../data/beaches_recent_avg.geojson',
     parksDataUrl: '../data/nearest_parks.geojson',
+    seasonDataUrl: '../data/season_data.json',
     safeLimit: 100,   // E. coli per 100 mL
         about: `
       <p class="lede">This map shows the water quality of beaches in Toronto, which is otherwise only accessable from going to the beach itself.</p>
@@ -97,12 +98,29 @@ function makeLayer(data, city, popupFn) {
   });
 }
 
+// What kind of shoreline a beach sits on explains a lot of its record, so it
+// goes in every popup. Share of beach-days unsafe since 2007, per category.
+const CATEGORY_RATE = {
+  'River/creek mouth': 38,
+  'Breakwall (enclosed)': 24,
+  'Open mainland': 12,
+  'Exposed island': 8
+};
+
+function categoryLine(p) {
+  if (!p.category) { return ''; }
+  const rate = CATEGORY_RATE[p.category];
+  return '<br><em>' + p.category + '</em>' +
+         (rate ? ' — ' + rate + '% of readings unsafe since 2007' : '');
+}
+
 function latestPopup(p, city) {
   const verdict = p.avg_ecoli > city.safeLimit ? 'Not safe for swimming' : 'Safe for swimming';
   return '<strong>' + p.beach_name + '</strong><br>' +
     verdict + '<br>' +
     'Average E. coli: ' + p.avg_ecoli + ' per 100 mL<br>' +
-    'Sampled ' + p.date + ' (' + p.n_readings + ' readings)';
+    'Sampled ' + p.date + ' (' + p.n_readings + ' readings)' +
+    categoryLine(p);
 }
 
 function recentPopup(p, city) {
@@ -110,7 +128,8 @@ function recentPopup(p, city) {
   return '<strong>' + p.beach_name + '</strong><br>' +
     verdict + '<br>' +
     'Average E. coli: ' + p.avg_ecoli + ' per 100 mL<br>' +
-    'Averaged over the last ' + p.seasons_used + ' seasons';
+    'Averaged over the last ' + p.seasons_used + ' seasons' +
+    categoryLine(p);
 }
 
 // A separate layer: the nearest park to each beach, for when swimming isn't
@@ -153,15 +172,213 @@ function makeParkLines(beachData, parksData) {
 
   return L.layerGroup(lines);
 }
+// ---- Season summary -------------------------------------------------------
+// The reader picks a year and a rainfall threshold; the page works out which
+// days that year had that much rain, and what happened to the beaches after.
+// The maths here mirrors beach_season_case_study.ipynb.
+let seasonData = null;   // the JSON, cached after its first load
+
+// Date arithmetic on "YYYY-MM-DD" strings. Parsed and stepped in UTC on
+// purpose: doing it in local time shifts the date across the timezone offset.
+function addDays(iso, n) {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// How many days from one date to another. Needed because beaches aren't sampled
+// every single day -- a reading's position in the list is not its day number.
+function daysBetween(a, b) {
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+
+// Draws every event of a season on one set of axes, so they can be compared:
+// days since the rain across the bottom, % of beaches unsafe up the side.
+// Hand-built SVG -- no charting library.
+function seasonPlot(events, baseline, daysAfter) {
+  const W = 320, H = 212;
+  const L = 34, R = 8, T = 10, B = 54;    // margins
+  const pw = W - L - R, ph = H - T - B;   // plot area
+  // Deliberately avoids the map's colours: red, green and teal already mean
+  // "unsafe", "safe" and "nearby park" in the legend beside this chart.
+  const palette = ['#1f77b4', '#ff7f0e', '#7b4397', '#8c564b', '#555555'];
+
+  const x = function (day) { return L + (day / daysAfter) * pw; };
+  // SVG's y axis grows downward, so a HIGH percentage maps to a SMALL y
+  const y = function (pct) { return T + ph - (pct / 100) * ph; };
+
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' +
+            'Percentage of beaches unsafe in the days following each heavy rain day">';
+
+  // horizontal gridlines, fixed 0-100% so the axis never silently rescales
+  [0, 25, 50, 75, 100].forEach(function (p) {
+    svg += '<line x1="' + L + '" y1="' + y(p) + '" x2="' + (L + pw) + '" y2="' + y(p) +
+           '" stroke="#e5e7ef" stroke-width="1"/>' +
+           '<text x="' + (L - 5) + '" y="' + (y(p) + 3) + '" font-size="9" fill="#666" ' +
+           'text-anchor="end">' + p + '%</text>';
+  });
+
+  for (let d = 0; d <= daysAfter; d++) {
+    svg += '<text x="' + x(d) + '" y="' + (T + ph + 13) + '" font-size="9" fill="#666" ' +
+           'text-anchor="middle">' + d + '</text>';
+  }
+  svg += '<text x="' + (L + pw / 2) + '" y="' + (T + ph + 26) + '" font-size="9" fill="#555" ' +
+         'text-anchor="middle">days since the heavy rain</text>';
+
+  svg += '<line x1="' + L + '" y1="' + y(baseline) + '" x2="' + (L + pw) + '" y2="' + y(baseline) +
+         '" stroke="#888" stroke-width="1" stroke-dasharray="4,3"/>';
+
+  // one line per event; shape alternates as well as colour, so the series are
+  // still tellable apart without relying on colour
+  events.forEach(function (ev, i) {
+    const c = palette[i % palette.length];
+    svg += '<polyline points="' + ev.days.map(function (d) { return x(d[0]) + ',' + y(d[1]); }).join(' ') +
+           '" fill="none" stroke="' + c + '" stroke-width="2"/>';
+    ev.days.forEach(function (d) {
+      svg += (i % 2 === 0)
+        ? '<circle cx="' + x(d[0]) + '" cy="' + y(d[1]) + '" r="3.5" fill="' + c + '"/>'
+        : '<rect x="' + (x(d[0]) - 3) + '" y="' + (y(d[1]) - 3) + '" width="6" height="6" fill="' + c + '"/>';
+    });
+  });
+
+  let lx = L;
+  const ly = H - 12;
+  events.forEach(function (ev, i) {
+    const c = palette[i % palette.length];
+    svg += (i % 2 === 0)
+      ? '<circle cx="' + (lx + 4) + '" cy="' + (ly - 3) + '" r="3.5" fill="' + c + '"/>'
+      : '<rect x="' + (lx + 1) + '" y="' + (ly - 6) + '" width="6" height="6" fill="' + c + '"/>';
+    svg += '<text x="' + (lx + 12) + '" y="' + ly + '" font-size="9" fill="#333">' + ev.date.slice(5) + '</text>';
+    lx += 54;
+  });
+  svg += '<line x1="' + lx + '" y1="' + (ly - 3) + '" x2="' + (lx + 10) + '" y2="' + (ly - 3) +
+         '" stroke="#888" stroke-width="1" stroke-dasharray="3,2"/>' +
+         '<text x="' + (lx + 14) + '" y="' + ly + '" font-size="9" fill="#333">baseline</text>';
+
+  return svg + '</svg>';
+}
+
+function summariseSeason(data, year, thresh) {
+  const yearStr = String(year);
+
+  // Is there a season for that year at all?
+  const inYear = data.beach_days.filter(function (r) { return r[0].slice(0, 4) === yearStr; });
+  if (inYear.length === 0) {
+    const all = data.beach_days;
+    return { error: 'No beach data for ' + year + '. Pick a year between ' +
+                    all[0][0].slice(0, 4) + ' and ' + all[all.length - 1][0].slice(0, 4) + '.' };
+  }
+
+  // Is the threshold a number that can tell you anything?
+  let maxRain = 0;
+  data.rain.forEach(function (r) { if (r[1] > maxRain) { maxRain = r[1]; } });
+  if (!(thresh > 0)) {
+    return { warning: 'A threshold of ' + thresh + 'mm counts every day as heavy rain, ' +
+                      'so the result would say nothing. Try a number above 0.' };
+  }
+  if (thresh > maxRain) {
+    return { warning: 'No day since 2007 saw ' + thresh + 'mm of rain — the wettest was ' +
+                      maxRain + 'mm. Try a lower threshold.' };
+  }
+
+  // The season's own span, and how often beaches were unsafe across all of it
+  const seasonStart = inYear[0][0];
+  const seasonEnd = inYear[inYear.length - 1][0];
+  let sampled = 0, unsafe = 0;
+  inYear.forEach(function (r) { sampled += r[1]; unsafe += r[2]; });
+  const baseline = Math.round((unsafe / sampled) * 100);
+
+  // Heavy rain days inside the sampling season, and the days that followed
+  const events = [];
+  data.rain.forEach(function (r) {
+    if (r[0].slice(0, 4) !== yearStr || r[1] < thresh) { return; }
+    if (r[0] < seasonStart || r[0] > seasonEnd) { return; }  // no beach data to compare against
+    const windowEnd = addDays(r[0], data.days_after);
+    const days = inYear
+      .filter(function (b) { return b[0] >= r[0] && b[0] <= windowEnd; })
+      .map(function (b) { return [daysBetween(r[0], b[0]), Math.round((b[2] / b[1]) * 100)]; });
+    events.push({ date: r[0], mm: r[1], days: days });
+  });
+
+  return { seasonStart: seasonStart, seasonEnd: seasonEnd, baseline: baseline,
+           events: events, daysAfter: data.days_after };
+}
+
+function renderSeason(result, year, thresh) {
+  if (result.error) {
+    return '<p style="color:#b3261e"><strong>' + result.error + '</strong></p>';
+  }
+  if (result.warning) {
+    return '<p style="color:#8a6d00"><strong>That won\'t tell you much.</strong> ' + result.warning + '</p>';
+  }
+
+  let html = '<p>The ' + year + ' season ran ' + result.seasonStart + ' to ' + result.seasonEnd +
+             '. Across the whole season, <strong>' + result.baseline + '%</strong> of readings were unsafe.</p>';
+
+  if (result.events.length === 0) {
+    return html + '<p>No day in that season had ' + thresh + 'mm of rain or more, so there is nothing ' +
+                  'to compare. Try a lower threshold.</p>';
+  }
+
+  html += '<p>' + result.events.length + ' day(s) reached ' + thresh + 'mm or more. Each line below ' +
+          'follows one of them through the days that came after:</p>' +
+          seasonPlot(result.events, result.baseline, result.daysAfter) +
+          '<ul>';
+  result.events.forEach(function (ev) {
+    html += '<li><strong>' + ev.date + '</strong> — ' + ev.mm + 'mm of rain</li>';
+  });
+  return html + '</ul><p class="source-note"><em>The dashed line is the season baseline of ' +
+                result.baseline + '%. Points above it mean water quality was worse than usual.</em></p>';
+}
+
+function showSeason(key) {
+  const panel = document.getElementById('panel-text');
+
+  function run() {
+    const year = parseInt(document.getElementById('season-year').value, 10);
+    const thresh = parseFloat(document.getElementById('season-mm').value);
+    document.getElementById('season-out').innerHTML = renderSeason(
+      summariseSeason(seasonData, year, thresh), year, thresh);
+  }
+
+  function build() {
+    panel.innerHTML =
+      '<p>Pick a season and a rainfall threshold to see how water quality reacted after heavy rain.</p>' +
+      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">' +
+        '<label>Year<br><input id="season-year" type="number" value="2021" style="width:85px"></label>' +
+        '<label>Heavy rain (mm)<br><input id="season-mm" type="number" value="25" style="width:85px"></label>' +
+        '<button id="season-go" type="button">Show</button>' +
+      '</div><div id="season-out"></div>';
+    document.getElementById('season-go').addEventListener('click', run);
+    run();
+  }
+
+  if (seasonData) { build(); return; }
+
+  panel.innerHTML = '<p>Loading season data ...</p>';
+  fetch(CITIES[key].seasonDataUrl)
+    .then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status + ' loading ' + CITIES[key].seasonDataUrl); }
+      return r.json();
+    })
+    .then(function (d) { seasonData = d; build(); })
+    .catch(function (err) {
+      panel.innerHTML = '<p>Could not load the season data. Open the console (F12) for details.</p>';
+      console.error(err);
+    });
+}
+
 function showSection(key, section) {
   const city = CITIES[key];
   if (key !== currentCity) { showCity(key); }
 
   const titles = {
     about: city.name + ' Beach Water Quality',
-    trends: city.name + ' Historical Quality Trends'
+    trends: city.name + ' Historical Quality Trends',
+    season: city.name + ' Season Summary'
   };
   document.getElementById('panel-title').textContent = titles[section];
+  if (section === 'season') { showSeason(key); return; }   // builds its own content
   document.getElementById('panel-text').innerHTML = city[section];
 }
 function showCity(key) {
@@ -232,7 +449,7 @@ function closeMenus() {
 }
 
 // The items in each city's dropdown: [section key, label shown]
-const SECTIONS = [['about', 'About'], ['trends', 'Historical trends']];
+const SECTIONS = [['about', 'About'], ['trends', 'Historical trends'], ['season', 'Season summary']];
 
 const bar = document.getElementById('city-bar');
 Object.keys(CITIES).forEach(function (key) {
