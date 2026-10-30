@@ -61,6 +61,18 @@ After the demo I had some ideas as to what to add to my map. Today I will add an
 
 Partner saw that green was safe, and red was unsafe (colours made sense)
 
+## A3 feature: [Season Summary]
+For A3 I will add a season summary tab, so that my reader can visualize how rain affects water quality.
+It has depth because it (computes / responds / brings in) past data and produces meaningful results that are easily interpretable.
+I will know it works when someone can understand and see the results.
+My edge case is ________.
+
+Test 1. I input a year and water threshold.
+  Expected: get a summary of that years beach season corresponding with the water threshold.
+Test 2. I input a year that data is not available for.
+  Expected: reads an error, tells the user to input a valid year.
+Test 3. I input a unrealistic water threshold.
+  Expected: Reader gets a warning indicating that that amount of water wont provide any meaningful results.
 
 ## AI disclosure
 
