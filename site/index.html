@@ -19,11 +19,20 @@
     </main>
         <div class="mapwrap">
       <div id="map"></div>
+      <!-- Only shown while a past rain-event day is on the map, so the reader
+           is never looking at historical data without being told the date. -->
+      <div id="event-banner" hidden
+           style="position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
+                  background:#fff;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.3);
+                  padding:6px 10px;font-size:13px;display:flex;gap:6px;align-items:center"></div>
       <div class="legend">
         <strong>E. coli (per 100 mL)</strong><br>
         <span style="background:#2ca02c"></span>Safe (&le; 100)<br>
         <span style="background:#d62728"></span>Unsafe (&gt; 100)<br>
         <span style="background:#1b998b"></span>Nearby park
+        <div id="legend-unsampled" hidden>
+          <span style="background:#e8c547;border:2px solid #b8860b;box-sizing:border-box"></span>Not sampled that day
+        </div>
       </div>
     </div>
   </div>

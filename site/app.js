@@ -81,6 +81,13 @@ let parksLayer = null;     // the nearby-parks markers + dotted lines (independe
 let layersControl = null;  // the layer switcher (top right)
 let currentCity = null;    // city which map is on now
 
+// --- rain-event playback state -------------------------------------------
+// Normally these stay null and the map behaves exactly as before. They are
+// only set while the reader is stepping through the days after a heavy rain.
+let latestGeo = null;      // the raw beaches.geojson, reused for its geometry
+let eventLayer = null;     // the markers for one past day
+let seasonView = null;     // { eventDate, dayOffset, displayDate, restoreTo }
+
 // Builds one coloured-marker layer from GeoJSON, using the given function
 // to write each marker's popup text.
 function makeLayer(data, city, popupFn) {
@@ -121,6 +128,53 @@ function latestPopup(p, city) {
     'Average E. coli: ' + p.avg_ecoli + ' per 100 mL<br>' +
     'Sampled ' + p.date + ' (' + p.n_readings + ' readings)' +
     categoryLine(p);
+}
+
+// One past day's readings, drawn on the beaches' existing geometry. Nothing
+// new is fetched: beaches.geojson already carries each beach's location, name
+// and category, so only the E. coli number is swapped in per date.
+// A beach with no sample that day is its own state, not a gap -- showing it
+// at its previous value would imply a reading that was never taken.
+function makeEventLayer(dateStr, city) {
+  const ids = seasonData.beach_ids;
+  const row = seasonData.beach_readings.find(function (r) { return r[0] === dateStr; });
+  const values = row ? row[1] : null;
+
+  const features = latestGeo.features.map(function (f) {
+    const i = ids.indexOf(f.properties.beach_id);
+    const reading = (values && i >= 0) ? values[i] : null;
+    const props = Object.assign({}, f.properties, { avg_ecoli: reading, obs_date: dateStr });
+    return { type: 'Feature', geometry: f.geometry, properties: props };
+  });
+
+  return L.geoJSON({ type: 'FeatureCollection', features: features }, {
+    pointToLayer: function (feature, latlng) {
+      const v = feature.properties.avg_ecoli;
+      if (v === null) {
+        // hollow as well as yellow, so it still reads as "no data" without colour
+        return L.circleMarker(latlng, {
+          radius: 7, stroke: true, color: '#b8860b', weight: 2,
+          fillColor: '#e8c547', fillOpacity: 0.25
+        });
+      }
+      return L.circleMarker(latlng, {
+        radius: 8, stroke: true, color: '#000', weight: 1,
+        fillColor: v > city.safeLimit ? colours.unsafe : colours.safe, fillOpacity: 0.8
+      });
+    },
+    onEachFeature: function (feature, layer) {
+      const p = feature.properties;
+      if (p.avg_ecoli === null) {
+        layer.bindPopup('<strong>' + p.beach_name + '</strong><br>' +
+          'Not sampled on ' + p.obs_date + categoryLine(p));
+        return;
+      }
+      layer.bindPopup('<strong>' + p.beach_name + '</strong><br>' +
+        (p.avg_ecoli > city.safeLimit ? 'Not safe for swimming' : 'Safe for swimming') + '<br>' +
+        'E. coli: ' + p.avg_ecoli + ' per 100 mL<br>' +
+        'Measured ' + p.obs_date + categoryLine(p));
+    }
+  });
 }
 
 function recentPopup(p, city) {
@@ -325,7 +379,10 @@ function renderSeason(result, year, thresh) {
           seasonPlot(result.events, result.baseline, result.daysAfter) +
           '<ul>';
   result.events.forEach(function (ev) {
-    html += '<li><strong>' + ev.date + '</strong> — ' + ev.mm + 'mm of rain</li>';
+    html += '<li><button type="button" class="event-pick" data-event="' + ev.date + '" data-mm="' + ev.mm +
+            '" style="background:none;border:none;padding:0;color:#1f77b4;text-decoration:underline;' +
+            'cursor:pointer;font:inherit"><strong>' + ev.date + '</strong> — ' + ev.mm +
+            'mm of rain</button> — see it on the map</li>';
   });
   return html + '</ul><p class="source-note"><em>The dashed line is the season baseline of ' +
                 result.baseline + '%. Points above it mean water quality was worse than usual.</em></p>';
@@ -335,10 +392,20 @@ function showSeason(key) {
   const panel = document.getElementById('panel-text');
 
   function run() {
+    // New parameters may not contain the event being viewed, so leave that view
+    exitEventMode(true);
+
     const year = parseInt(document.getElementById('season-year').value, 10);
     const thresh = parseFloat(document.getElementById('season-mm').value);
     document.getElementById('season-out').innerHTML = renderSeason(
       summariseSeason(seasonData, year, thresh), year, thresh);
+
+    // Each listed event becomes a way into the map view of that day
+    document.querySelectorAll('#season-out .event-pick').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        enterEventMode(btn.dataset.event, btn.dataset.mm);
+      });
+    });
   }
 
   function build() {
@@ -368,9 +435,91 @@ function showSeason(key) {
     });
 }
 
+// "Latest reading" / "3-season average" are base layers, so Leaflet treats them
+// as mutually exclusive -- they're the same points, and showing both at once
+// would just stack two sets of markers. "Nearby parks" is an overlay because it
+// sits at different locations and is meant to be seen alongside either one.
+// While a rain event is being viewed, it joins as a third base layer, so the
+// switcher always names what is actually on the map instead of lying about it.
+function rebuildLayersControl() {
+  if (layersControl) { map.removeControl(layersControl); }
+  const bases = { 'Latest reading': latestLayer, '3-season average': recentLayer };
+  if (eventLayer) { bases['Rain event'] = eventLayer; }
+  layersControl = L.control.layers(bases, { 'Nearby parks': parksLayer }).addTo(map);
+}
+
+// --- rain-event playback --------------------------------------------------
+
+function drawEventBanner() {
+  const banner = document.getElementById('event-banner');
+  if (!seasonView) { banner.hidden = true; banner.innerHTML = ''; return; }
+
+  let html = '<strong>' + seasonView.displayDate + '</strong>' +
+             '<span style="color:#5b6477">day ' + seasonView.dayOffset +
+             ' after ' + seasonView.mm + 'mm</span>';
+  for (let d = 0; d <= seasonData.days_after; d++) {
+    const on = d === seasonView.dayOffset;
+    html += '<button type="button" data-day="' + d + '" style="min-width:24px;padding:2px 6px;' +
+            'cursor:pointer;border:1px solid #bbb;border-radius:3px;' +
+            (on ? 'background:#1f77b4;color:#fff;font-weight:bold' : 'background:#fff') + '">' + d + '</button>';
+  }
+  html += '<button type="button" id="event-exit" style="margin-left:4px;padding:2px 8px;cursor:pointer;' +
+          'border:1px solid #bbb;border-radius:3px;background:#fff">back to latest</button>';
+  banner.innerHTML = html;
+  banner.hidden = false;
+
+  banner.querySelectorAll('[data-day]').forEach(function (b) {
+    b.addEventListener('click', function () { setEventDay(parseInt(b.dataset.day, 10)); });
+  });
+  document.getElementById('event-exit').addEventListener('click', function () { exitEventMode(true); });
+}
+
+function setEventDay(offset) {
+  seasonView.dayOffset = offset;
+  seasonView.displayDate = addDays(seasonView.eventDate, offset);
+
+  if (eventLayer) { map.removeLayer(eventLayer); }
+  eventLayer = makeEventLayer(seasonView.displayDate, CITIES[currentCity]).addTo(map);
+  rebuildLayersControl();      // the new layer object has to be the one registered
+  drawEventBanner();
+}
+
+function enterEventMode(eventDate, mm) {
+  if (!latestGeo || !seasonData) { return; }
+  const restoreTo = (recentLayer && map.hasLayer(recentLayer)) ? 'recent' : 'latest';
+  if (latestLayer) { map.removeLayer(latestLayer); }
+  if (recentLayer) { map.removeLayer(recentLayer); }
+
+  seasonView = { eventDate: eventDate, mm: mm, dayOffset: 0, displayDate: eventDate, restoreTo: restoreTo };
+  document.getElementById('legend-unsampled').hidden = false;
+  setEventDay(0);
+}
+
+// `restore` is false when the reader left by picking another layer themselves --
+// Leaflet has already put that layer on the map, so putting one back would fight them.
+function exitEventMode(restore) {
+  if (!seasonView) { return; }
+  const restoreTo = seasonView.restoreTo;   // read before clearing the state
+  if (eventLayer) { map.removeLayer(eventLayer); eventLayer = null; }
+  seasonView = null;
+  document.getElementById('legend-unsampled').hidden = true;
+  drawEventBanner();
+  if (restore) {
+    const back = (restoreTo === 'recent') ? recentLayer : latestLayer;
+    if (back) { back.addTo(map); }
+  }
+  rebuildLayersControl();
+}
+
+// Picking any other base layer leaves the event behind
+map.on('baselayerchange', function (e) {
+  if (seasonView && e.layer !== eventLayer) { exitEventMode(false); }
+});
+
 function showSection(key, section) {
   const city = CITIES[key];
   if (key !== currentCity) { showCity(key); }
+  if (seasonView && section !== 'season') { exitEventMode(true); }
 
   const titles = {
     about: city.name + ' Beach Water Quality',
@@ -420,16 +569,8 @@ function showCity(key) {
         makeParksLayer(parksData)
       ]);
 
-      // "Latest reading" / "3-season average" are passed as the first argument
-      // (base layers) so Leaflet treats them as mutually exclusive -- they're
-      // the same points, so showing both at once would just stack two sets of
-      // markers on top of each other. "Nearby parks" goes in the second
-      // argument (an overlay) because it sits at different locations and is
-      // meant to be viewed alongside whichever beach layer is active.
-      layersControl = L.control.layers(
-        { 'Latest reading': latestLayer, '3-season average': recentLayer },
-        { 'Nearby parks': parksLayer }
-      ).addTo(map);
+      latestGeo = latestData;   // kept so a past day can reuse this geometry
+      rebuildLayersControl();
 
       document.getElementById('status').textContent =
         'Showing ' + latestData.features.length + ' beaches in ' + city.name + '.';
