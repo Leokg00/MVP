@@ -74,6 +74,18 @@ Test 2. I input a year that data is not available for.
 Test 3. I input a unrealistic water threshold.
   Expected: Reader gets a warning indicating that that amount of water wont provide any meaningful results.
 
+  ## Pre-flight report (Lab 7)
+| Check | Result | What I did |
+| --- | --- | --- |
+| 1. Cold start | pass | no red lines in the console |
+| 2. Read every label | Pass | ... |
+| 3. Ask twice | Pass | ... |
+| 4. The edge | Fault | If i put a word into the places boxes for years and threshold, I revieve a NaN. To fix this I added if statements to my summariseSeason function in the java script so that if a user did put in words/negative numbers it no gives them an answer in english|
+| 5. The data does not come | ... | ... |
+| 6. On a phone (size view and my phone) | ... | ... |
+| 7. Mouse in my pocket | Pass | ... |
+| 8. Accessibility audit | ... | ... |
+
 ## AI disclosure
 
 I used Claude Code whenever consulting an AI for the entirety of this project. I chose to use the "blue" lane when doing most of my prompts. I used a lot of the code from labs and folders that were handed out on moodle and asked claude to change data so that it corresponded with my project. Most of the time I got Claude to inform me where a change is to be made and why, so I can gain some insight as to how I can manipulate the code further without the help of the tool. I did go down the "black diamond" lane for the precipitation model notebook, as I did not directly implement the findings into the website. I wanted to see what was possible and if there were correlations between the data. I also used Claude to troubleshoot any weird results I would recive from the code. For example initally my points on the map were not exactly where the beach was. I asked it how it was reciving the coordinates, then found that there were a few outliers within the data (some coordinates we multiple kms apart, when they shouldve been just meters). Then we came up with a work around which was eventually implemented in the notebook. All the text on the site is mine, Claude helped me with the dirty work of understanding the coding languages. 

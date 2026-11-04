@@ -315,12 +315,26 @@ function seasonPlot(events, baseline, daysAfter) {
 function summariseSeason(data, year, thresh) {
   const yearStr = String(year);
 
+    // Did they actually type numbers? A number input hands back "" for anything
+  // it can't parse, so "hello" and an empty box arrive here identically as NaN.
+  const all = data.beach_days;
+  const firstYear = all[0][0].slice(0, 4);
+  const lastYear = all[all.length - 1][0].slice(0, 4);
+
+  if (!Number.isFinite(year)) {
+    return { error: 'Please enter a valid year between ' + firstYear + ' and ' + lastYear + '.' };
+  }
+  if (!Number.isFinite(thresh)) {
+    return { warning: 'Please enter a rainfall amount in millimetres \u2014 for example 25.' };
+  }
+    if (thresh <= 0) {
+    return { warning: 'Rainfall can\'t be zero or negative. Try a number above 0.' };
+  }
   // Is there a season for that year at all?
   const inYear = data.beach_days.filter(function (r) { return r[0].slice(0, 4) === yearStr; });
   if (inYear.length === 0) {
-    const all = data.beach_days;
-    return { error: 'No beach data for ' + year + '. Pick a year between ' +
-                    all[0][0].slice(0, 4) + ' and ' + all[all.length - 1][0].slice(0, 4) + '.' };
+     return { error: 'No beach data for ' + year + '. Pick a year between ' +
+                    firstYear + ' and ' + lastYear + '.' };
   }
 
   // Is the threshold a number that can tell you anything?
@@ -575,11 +589,11 @@ function showCity(key) {
       document.getElementById('status').textContent =
         'Showing ' + latestData.features.length + ' beaches in ' + city.name + '.';
     })
-    .catch(function (err) {
-      document.getElementById('status').textContent =
-        'Could not load ' + city.name + ' data. Open the console (F12) for details.';
+   .catch(function (err) {
+      showMapError('The beach readings could not be loaded. Check your connection and reload the page.');
+      document.getElementById('status').textContent = 'Beach data unavailable.';
       console.error(err);
-    });
+  });
 }
 
 // Close every open dropdown
