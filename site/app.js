@@ -544,6 +544,17 @@ function showSection(key, section) {
   if (section === 'season') { showSeason(key); return; }   // builds its own content
   document.getElementById('panel-text').innerHTML = city[section];
 }
+function showMapError(message) {
+  const box = document.getElementById('map-error');
+  box.innerHTML = '<strong>Map data unavailable</strong><br>' + message;
+  box.hidden = false;
+  document.querySelector('.legend').hidden = true;  // stop promising markers that aren't there
+}
+
+function clearMapError() {
+  document.getElementById('map-error').hidden = true;
+  document.querySelector('.legend').hidden = false;
+}
 function showCity(key) {
   const city = CITIES[key];
 
