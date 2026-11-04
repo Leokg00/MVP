@@ -583,6 +583,7 @@ function showCity(key) {
 
   Promise.all([loadJSON(city.dataUrl), loadJSON(city.recentDataUrl), loadJSON(city.parksDataUrl)])
     .then(function (results) {
+      clearMapError();
       const latestData = results[0];
       const recentData = results[1];
       const parksData = results[2];
