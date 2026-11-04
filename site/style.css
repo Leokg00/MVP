@@ -57,7 +57,7 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif;
 .source-note { font-size: 12px; color: #777; }
 
 /* On phones, put the map on top and let the whole page scroll */
-@media (max-width: 800px) {
+@media (max-width: 700px) {
   body { height: auto; overflow: auto; }
   .page { grid-template-columns: 1fr; height: auto; }
   .mapwrap { order: 1; height: 60vh; }
