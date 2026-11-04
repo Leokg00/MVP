@@ -78,13 +78,13 @@ Test 3. I input a unrealistic water threshold.
 | Check | Result | What I did |
 | --- | --- | --- |
 | 1. Cold start | pass | no red lines in the console |
-| 2. Read every label | Pass | ... |
-| 3. Ask twice | Pass | ... |
-| 4. The edge | Fault (now passed) | If i put a word into the places boxes for years and threshold, I revieve a NaN. To fix this I added if statements to my summariseSeason function in the java script so that if a user did put in words/negative numbers it no gives them an answer in english|
-| 5. The data does not come | Fault (now passed) | I would just have a blank screen if I blocked the GeoJSON url to the site. I add a catch error to say that data is unavailable.  |
-| 6. On a phone (size view and my phone) | fault (now passed)| Map is all wacky.. |
+| 2. Read every label | Pass | check - no issues|
+| 3. Ask twice | Pass | check - no issues |
+| 4. The edge | Fault (now passed) | If i put a word into the places boxes for years and threshold, I revieve a NaN. To fix this I added if statements to my summariseSeason function in the java script so that if a user did put in words/negative numbers it no gives them an answer in english. commit ("added error for if url is blocked, and NaN when inputing an invalid year and thresh")|
+| 5. The data does not come | Fault (now passed) | I would just have a blank screen if I blocked the GeoJSON url to the site. I add a catch error to say that data is unavailable. commit ("pop up for if data is not loading") |
+| 6. On a phone (size view and my phone) | fault (now passed)| Map is at the bottom of page in mobile setting. Fixed with block of css setting a threshold for the dimensions of the device. commit ("added code for mobile in css file)|
 | 7. Mouse in my pocket | Pass | recgonizes buttons |
-| 8. Accessibility audit | ... | ... |
+| 8. Accessibility audit | pass | 100% |
 
 ## AI disclosure
 
