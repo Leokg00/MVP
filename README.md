@@ -75,6 +75,8 @@ Test 3. I input a unrealistic water threshold.
   Expected: Reader gets a warning indicating that that amount of water wont provide any meaningful results.
 
   ## Pre-flight report (Lab 7)
+
+
 | Check | Result | What I did |
 | --- | --- | --- |
 | 1. Cold start | pass | no red lines in the console |
