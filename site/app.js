@@ -28,13 +28,20 @@ const CITIES = {
     safeLimit: 100,   // E. coli per 100 mL
         about: `
       <p class="lede">This map shows the water quality of beaches in Toronto, which is otherwise only accessable from going to the beach itself.</p>
-      <p><strong>This map is for</strong> Distance Swimmers and Recreational Users.</p>
+      <p><strong>This map is for:</strong> Distance Swimmers, Recreational Users, and Water Quality Researchers.</p>
       <p><strong>What you can do here:</strong> On this website, you can view the water quality data for different beaches in Toronto. You can also see historical trends in water quality since 2007</p>
+      <p><button type="button" id="go-season" class="jump-btn">
+         See how rain affects water quality &rarr;</button></p>
       <section>
         <h2>Not in this iteration</h2>
-        <p>Live rainfall-based risk estimates are not included in this version. I cut the ability to access live rainfall data and prioritized the display of historical trends. I plan to add this function eventually. 
-        I also coded everything with the intention of adding other cities. Toronto has stopped collecting live water quality data, so what you see on the map is the most updated results. I plan to add other cities like Sydney, Australia to explore real-time
-        data updates in the future.</p>
+        <ul>
+          <li>Live rainfall-based risk estimates &mdash; the model exists in
+              <code>precipitation_model.ipynb</code> but is not wired into the map.</li>
+          <li>Other cities &mdash; the code supports them. Montr&eacute;al is next: its data is
+              published as GeoJSON going back to 2003, but it measures fecal coliforms
+              against a 200/100mL limit rather than E. coli against 100, so the two
+              cannot be compared directly until that is handled.</li>
+        </ul>
       </section>
       <section>
         <h2>Where this comes from</h2>
@@ -543,6 +550,12 @@ function showSection(key, section) {
   document.getElementById('panel-title').textContent = titles[section];
   if (section === 'season') { showSeason(key); return; }   // builds its own content
   document.getElementById('panel-text').innerHTML = city[section];
+
+  // The About panel carries a shortcut into the Season Summary, because testers
+  // did not realise the city dropdown was a menu. Wired after innerHTML, since
+  // that replaces the elements every time the panel is drawn.
+  const jump = document.getElementById('go-season');
+  if (jump) { jump.addEventListener('click', function () { showSection(key, 'season'); }); }
 }
 function showMapError(message) {
   const box = document.getElementById('map-error');
