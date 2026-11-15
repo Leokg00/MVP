@@ -454,7 +454,7 @@ function showSeason(key) {
 // would just stack two sets of markers. "Nearby parks" is an overlay because it
 // sits at different locations and is meant to be seen alongside either one.
 // While a rain event is being viewed, it joins as a third base layer, so the
-// switcher always names what is actually on the map instead of lying about it.
+// switcher always names what is actually on the map.
 function rebuildLayersControl() {
   if (layersControl) { map.removeControl(layersControl); }
   const bases = { 'Latest reading': latestLayer, '3-season average': recentLayer };
