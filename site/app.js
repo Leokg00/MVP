@@ -79,6 +79,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 // Toronto's swimming limit: over 100 E. Coli per 100 mL is unsafe.
 
+let marksAdded = false;    // the favourites panel is added once, not per city
 
 const colours = { safe: '#2ca02c', unsafe: '#d62728' };
 
@@ -596,12 +597,22 @@ function showCity(key) {
 
   Promise.all([loadJSON(city.dataUrl), loadJSON(city.recentDataUrl), loadJSON(city.parksDataUrl)])
     .then(function (results) {
+
       clearMapError();
       const latestData = results[0];
       const recentData = results[1];
       const parksData = results[2];
 
       latestLayer = makeLayer(latestData, city, latestPopup).addTo(map);
+
+            if (!marksAdded) {
+        // topleft: memory.js already owns topright, and stacking all three
+        // there buries the layer switcher
+        rememberMarks(map, latestLayer, { idField: 'beach_id', nameField: 'beach_name',
+                                          title: 'My beaches', position: 'topleft' });
+        marksAdded = true;
+      }
+
       recentLayer = makeLayer(recentData, city, recentPopup);
       parksLayer = L.layerGroup([
         makeParkLines(latestData, parksData),   // drawn first, so dots sit on top
