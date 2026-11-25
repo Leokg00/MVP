@@ -15,6 +15,9 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif;
 
 .story h1 { color: var(--accent); font-size: 30px; margin: 0 0 8px; }
 .story h2 { color: var(--accent); font-size: 20px; margin-top: 28px; }
+.season-notice { margin: 0 0 4px; color: #b3261e; font-weight: bold;
+                 text-transform: uppercase; letter-spacing: .02em; }
+.season-date   { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
 #status { color: var(--muted); font-size: 15px; }
 
 #map { height: 100%; min-height: 420px; border-radius: 8px; }
